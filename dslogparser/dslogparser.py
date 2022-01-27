@@ -48,19 +48,26 @@ class DSLogParser():
         return
 
     def read_records(self):
-        if self.version != 3:
-            raise Exception("Unknown file version number {}".format(self.version))
 
-        while True:
+        if self.version == 3:
+          while True:
             r = self.read_record_v3()
             if r is None:
                 break
             yield r
-        return
+          return
+        if self.version == 4:
+          while True:
+            r = self.read_record_v4()
+            if r is None:
+                break
+            yield r
+          return
+        raise Exception("Unknown file version number {}".format(self.version))
 
     def read_header(self):
         self.version = struct.unpack('>i', self.strm.read(4))[0]
-        if self.version != 3:
+        if not ( self.version == 3 or self.version == 4):
             raise Exception("Unknown file version number {}".format(self.version))
 
         self.curr_time = read_timestamp(self.strm)
@@ -72,6 +79,23 @@ class DSLogParser():
             return None
         pdp_bytes = self.strm.read(25)
         if not pdp_bytes or len(pdp_bytes) < 25:
+            # should not happen!!
+            raise EOFError("No data for PDP. Unexpected end of file.")
+
+        res = {'time': self.curr_time}
+        res.update(self.parse_data_v3(data_bytes))
+        res.update(self.parse_pdp_v3(pdp_bytes))
+        self.curr_time += self.record_time_offset
+        return res
+
+    def read_record_v4(self):
+        # This routine is wrong, there are other changes in version 4 besides the length of the PDP data.
+        # however assuming 68 bytes per line does allow the first 10 bytes to be correct.
+        data_bytes = self.strm.read(10)
+        if not data_bytes or len(data_bytes) < 10:
+            return None
+        pdp_bytes = self.strm.read(68)
+        if not pdp_bytes or len(pdp_bytes) < 68:
             # should not happen!!
             raise EOFError("No data for PDP. Unexpected end of file.")
 
@@ -186,7 +210,8 @@ class DSEventParser():
         return
 
     def read_records(self):
-        if self.version != 3:
+        # version 3 and 4 are the same for the events file.
+        if not ( self.version == 3 or self.version == 4 ): 
             raise Exception("Unknown file version number {}".format(self.version))
 
         while True:
@@ -198,7 +223,8 @@ class DSEventParser():
 
     def read_header(self):
         self.version = struct.unpack('>i', self.strm.read(4))[0]
-        if self.version != 3:
+        # version 3 and 4 are the same for the events file.
+        if not ( self.version == 3 or self.version == 4 ): 
             raise Exception("Unknown file version number {}".format(self.version))
         self.start_time = read_timestamp(self.strm)  # file starttime
         return
